@@ -1,6 +1,5 @@
 # Change randoms
 # Add zones
-# correct billing after adding functinal getEncryptionKeys
 # Integrate with MPC
 # Did not think about hiding whether consumer or prosumer ?
 import random
@@ -19,8 +18,9 @@ tradingPrices = [156,201,233,160,247,210,195,262,187,143] #300 pounds per Watt i
 FiT = [100,90,95,100,100,99,97,95,98,99]
 meterReadings = [700,500,900,600,400,500,800,900,700,600]
 tradingVolumes = [650,400,850,550,390,490,777,888,650,500]
-vs = [.1,-.15,.09,.05,-.03,.04,-.08,.04,.11,.07] # deviation share for each period (total deviation/number of prosumers or consumers), we should get these values from MPC
-
+vs = [45,50,37.6,-10,-23,44,-31,39,41,-18] # Deviation share for each period (total deviation (per watt)/number of prosumers or consumers), we should get these values from MPC
+prosumerEncoding = [1,1,1,1,1,1,1,1,1,0] # 1 for prosumer and 0 for conumer
+crosumerEncoding = [0,0,0,0,0,0,0,0,0,1]
 # variables necassary for functional encryption and encoding
 # 1- Number of Vector's Elements ( one extra element for encoding the number zero)
 D = 12
@@ -28,22 +28,37 @@ D = 12
 N = D-1
 
 class KeyAuthority:
-  randomKeys = []
-  DecKey = 0
+  readingsKeys = []
+  TypeKeys = []
+  DecKey,typeDecKey = 0 ,0
   pp, sk = 0,0
-  def getEncryptionKeys(self):
+  def getReadingsEncryptionKeys(self):
     for i in range(0,10): #10 periods
       n = int.from_bytes(os.urandom(4), byteorder="big")
-      KeyAuthority.randomKeys.append(n)
-    print("Secret Keys are: ",KeyAuthority.randomKeys)
-    return KeyAuthority.randomKeys
+      KeyAuthority.readingsKeys.append(n)
+    print("Secret meater reading keys are: ",KeyAuthority.readingsKeys)
+    return KeyAuthority.readingsKeys
+ #
+  def getTypeEncryptionKeys(self):
+    for i in range(0,10): #10 periods
+      n = int.from_bytes(os.urandom(4), byteorder="big")
+      KeyAuthority.TypeKeys.append(n)
+    print("Secret type keys are: ",KeyAuthority.TypeKeys)
+    return KeyAuthority.TypeKeys
 
   def getDecryptionKey(self):
     for i in range(0,10):
-      KeyAuthority.DecKey += KeyAuthority.randomKeys[i] * tradingPrices[i]
+      KeyAuthority.DecKey += KeyAuthority.readingsKeys[i] * tradingPrices[i]
       KeyAuthority.DecKey = KeyAuthority.DecKey % pow(2,23)
     print("Decryption key is: ", KeyAuthority.DecKey)
     return KeyAuthority.DecKey
+
+  def getTypeDecryptionKey(self):
+    for i in range(0,10):
+      KeyAuthority.typeDecKey += KeyAuthority.TypeKeys[i] * tradingPrices[i]
+      KeyAuthority.typeDecKey = KeyAuthority.typeDecKey % pow(2,23)
+    print("Decryption key is: ", KeyAuthority.typeDecKey)
+    return KeyAuthority.typeDecKey
 
   def ipeSetup(self):
     (KeyAuthority.pp, KeyAuthority.sk) = ipe.setup(D)
@@ -62,7 +77,7 @@ class SmartMeter:
     self.sky = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(10)]
 
   def getMaskedReadings(self):
-    randomKeys = self.KAuth.getEncryptionKeys()
+    randomKeys = self.KAuth.getReadingsEncryptionKeys()
     for i in range(0,10):
       self.MaskedReadings.append(meterReadings[i] + randomKeys[i])
     print("Masked Readings", self.MaskedReadings)
@@ -111,31 +126,32 @@ class MarketOperator:
 class Supplier:
   def __init__(self):
         self.BillCT = 0
-        self.EncryptedReading = [[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]
-        self.EncryptedVolumeL = [[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]
-        self.EncryptedVolumeLR = [[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]
+        self.EncryptedReading = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(10)]
+        self.EncryptedVolumeL = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(10)]
+        self.EncryptedVolumeLR = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(10)]
         self.SM = SmartMeter()
         self.KAuth = KeyAuthority()
         self.MO = MarketOperator()
 
   # Check if user has deviated using IPFE
-  def checkDeviations(self):
+  def checkDeviations(self,i):
       self.EncryptedReading = self.SM.getIpfeEncryptedReading()
       self.EncryptedVolumeL,self.EncryptedVolumeR = self.MO.getIpfeEncryptedVolume()
 
+      for j in range(N): # i: period number,  self.EncryptedReading[i] to retreive the encrypted reading of period i.
+          #j: every meter reading is represented using N number of encdoed vectors , each is encrypted using IPFE
       # Less than comparision , check if trading volume is less than the actual meter reading (positive deviation)
-      for i in range(N):
-          prod = ipe.decrypt(self.KAuth.getPublicParameters(), self.EncryptedReading[i] , self.EncryptedVolumeL[i], D)
-          if prod==0:return 1
+          prod = ipe.decrypt(self.KAuth.getPublicParameters(), self.EncryptedReading[i][j] , self.EncryptedVolumeL[i][j], D)
+          if prod==0:return 1 # indicate positive deviation
       # Greater than comparision , check if trading volume is more than the actual meter reading (negative deviation)
-          prod = ipe.decrypt(self.KAuth.getPublicParameters(),self.EncryptedReading[i],  self.EncryptedVolumeR[i], D)
-          if prod==0:return -1
-      return 0 # Trading volume is equal to meater reading
+          prod = ipe.decrypt(self.KAuth.getPublicParameters(),self.EncryptedReading[i][j],  self.EncryptedVolumeR[i][j], D)
+          if prod==0:return -1 # indicate negative deviation
+      return 0 # No deviation, trading volume is equal to meater reading
 
   def ComputeBill(self):
     MaskedReadings=self.SM.getMaskedReadings()
     for i in range(0,10):
-      self.BillCT += (MaskedReadings[i] * tradingPrices[i]) + ((vs[i]>0) * (self.checkDeviations()>0) * vs[i] *(tradingPrices[i] - FiT[i]))
+      self.BillCT += (MaskedReadings[i] * tradingPrices[i]) + ((vs[i]>0) * (self.checkDeviations(i)>0) * vs[i] *(FiT[i] - tradingPrices[i]))
       #if vs[i]>0 & self.checkDeviations()==0: #Deviation share is potitive and individual deviation is positive
         #  self.BillCT += vs[i] * (tradingPrices[i] - FiT[i])
     self.BillCT = self.BillCT % pow(2,23)
@@ -145,7 +161,7 @@ class Supplier:
     DecKey = self.KAuth.getDecryptionKey()
     for i in range(0,10):
       Bill = (self.BillCT - DecKey) % pow(2,23)
-    print("The bill after decryption is: ", Bill)
+    print("The bill after decryption is: ", Bill/1000)
 
   def aggregIVCommitments(self): #Compute individual deviations commitmements and aggregate them
     ComittedReadings = self.SM.getCommitedReadings()
@@ -162,7 +178,6 @@ class Supplier:
     else:
     	print ("Failure!")
 
-
 # Inner-product functional encryption keysSetup
 KAuth = KeyAuthority()
 KAuth.ipeSetup()
@@ -171,15 +186,15 @@ supplier = Supplier()
 Bill =0
 for i in range(0,10): #10 periods
     Bill += meterReadings[i] * tradingPrices[i]
-    if (vs[i]>0) * (supplier.checkDeviations()>0):
-        Bill += vs[i] * (tradingPrices[i] - FiT[i])
+    if (vs[i]>0) * (supplier.checkDeviations(i)>0):
+        Bill += vs[i] * (FiT[i] - tradingPrices[i])
 Bill = Bill % pow(2,23)
-print("Bill computation in clear (for testing) is: ",Bill)
+print("Bill computation in clear (for testing) is: ",Bill/1000)
 Bill=0
 for i in range(0,10): #10 periods
     Bill += meterReadings[i] * tradingPrices[i]
 Bill = Bill % pow(2,23)
-print("Bill computation without deviations in clear (for testing) is: ",Bill)
+print("Bill computation without deviations in clear (for testing) is: ",Bill/1000)
 supplier.ComputeBill() #Encrypted
 supplier.getCorrectBills()
 supplier.aggregIVCommitments()

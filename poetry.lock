@@ -1,0 +1,15 @@
+[[package]]
+name = "libnum"
+version = "1.7.1"
+description = "Working with numbers (primes, modular, etc.)"
+category = "main"
+optional = false
+python-versions = ">=3.4,<4.0"
+
+[metadata]
+lock-version = "1.1"
+python-versions = "^3.8"
+content-hash = "1e75066f4c0dd0ba20719202a1226cc64bf6d0c360d0963d271769582ebd9d87"
+
+[metadata.files]
+libnum = []

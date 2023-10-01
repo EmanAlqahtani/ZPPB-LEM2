@@ -7,12 +7,12 @@ from fhipe.fhipe import ipe
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.insert(1, os.path.abspath('..'))
 # Number of Vector's Elements ( one extra element for encoding the number zero)
-D = 5
+D = 7
 
 # Number of vectors and Number of bits representing the decmilal number to be encoded
 N = D-1
 
-Y=6
+Y=5
 # VectorY encoding
 VectorY = [[0]*D for _ in range(N)]
 # now convert to string of 1s and 0s

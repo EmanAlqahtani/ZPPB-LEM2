@@ -147,6 +147,8 @@ class MarketOperator:
           for j in range(N):
               self.skxL[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXLEncoding(usersTupples[u][i][1],D)[j])
               self.skxR[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXREncoding(usersTupples[u][i][1],D)[j])
+      if usersTupples[u][i][2]==0: # check if the user is a prosumer, flip the two X vectors over to get a correct less than , greater than comparision (as we simply woild have either two positve values or two negatvie values to compare)
+        return self.skxR,self.skxL
       return self.skxL,self.skxR
 
 class Supplier:
@@ -178,14 +180,14 @@ class Supplier:
   def ComputeBill(self,u):
     maskedReadings, maskedPTypes, maskedCTypes =self.SM.getMaskedReadings(u), self.MO.getMaskedPTypes(u), self.MO.getMaskedCTypes(u)
     for i in range(0,2):
-#      self.BillCT += ((maskedReadings[i] * tradingPrices[i]) + ((vs[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * vs[i] *(FiT[i] - tradingPrices[i])) + ((vs[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * vs[i] *(RP[i] - tradingPrices[i])))
+#   self.BillCT += ((maskedReadings[i] * tradingPrices[i]) + ((vs[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * vs[i] *(FiT[i] - tradingPrices[i])) + ((vs[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * vs[i] *(RP[i] - tradingPrices[i])))
         self.BillCT[u] += (maskedReadings[i] * tradingPrices[i])
         if (vs[i]>0) * (self.checkDeviations(i,u)>0):
             self.decPKeyHelper[u][i]=1
-            self.BillCT[u] += maskedPTypes[i] * vs[i] *(FiT[i] - tradingPrices[i])
+            self.BillCT[u] += maskedPTypes[i] * vs[i] *(FiT[i] - tradingPrices[i]) # if it is a consumer, then this added value would be removed during decryption
         elif (vs[i]<0) * (self.checkDeviations(i,u)<0):
             self.decCKeyHelper[u][i]=1
-            self.BillCT[u] += maskedCTypes[i] * vs[i] *(RP[i] - tradingPrices[i])
+            self.BillCT[u] += maskedCTypes[i] * vs[i] *(RP[i] - tradingPrices[i]) # if it is a prosumer, then this added value would be removed during decryption
         self.BillCT[u] = self.BillCT[u] % pow(2,23)
     print("Encrypted bill is: ", self.BillCT[u])
 
@@ -253,6 +255,7 @@ supplier.aggregIVCommitments()
 Bill =0
 for i in range(0,2): #10 periods
     Bill += usersTupples[0][i][0] * tradingPrices[i]
+    print("Dev",supplier.checkDeviations(i,0))
     if (supplier.checkDeviations(i,0)>0) * (vs[i]>0):
         Bill += vs[i] * (FiT[i] - tradingPrices[i]) * usersTupples[u][i][2]
     elif (supplier.checkDeviations(i,0)<0) * (vs[i]<0):
@@ -261,7 +264,7 @@ Bill = Bill % pow(2,23)
 print("Bill computation in clear (for testing) is: ", Bill/1000)
 
 Bill=0
-for i in range(0,22): #10 periods
+for i in range(0,2): #10 periods
     Bill += usersTupples[0][i][0] * tradingPrices[i]
 Bill = Bill % pow(2,23)
 print("Bill computation without deviations in clear (for testing) is: ", Bill/1000)

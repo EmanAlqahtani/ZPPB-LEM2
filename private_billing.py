@@ -93,9 +93,9 @@ class SmartMeter:
     return self.MaskedReadings
 
   # Pedersen Commitment
-  def getCommitedReadings(self):
-    for i in range(0,3):
-      self.ComittedReadings.append(point_add(scalar_mult(-1 * meterReadings[i],curve.g),scalar_mult(3,curve.g)))
+  def getCommitedReadings(self,u):
+    for i in range(0,2):
+      self.ComittedReadings.append(point_add(scalar_mult(usersTupples[u][i][0],curve.g),scalar_mult(5,curve.g)))
     return self.ComittedReadings
 
   # InnerProducts functionl encryption (meater readings)
@@ -119,11 +119,11 @@ class MarketOperator:
       self.skxL = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
       self.skxR = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
 
-  # mask prosumer vector
+  # mask prosumer type vector
   def getMaskedPTypes(self,u):
     randomKeys = self.KAuth.getPTypeEncryptionKeys()
     for i in range(0,2):
-      self.MaskedPTypes.append(usersTupples[u][i][2] + randomKeys[i])
+      self.MaskedPTypes.append(usersTupples[u][i][2] + randomKeys[i]) #prosumers encoding: 1 for prosumer and 0 for consumer
     print("Masked prosumer vector", self.MaskedPTypes)
     return self.MaskedPTypes
 
@@ -131,13 +131,13 @@ class MarketOperator:
   def getMaskedCTypes(self,u):
     randomKeys = self.KAuth.getCTypeEncryptionKeys()
     for i in range(0,2):
-      self.MaskedCTypes.append(1 + randomKeys[i])
+      self.MaskedCTypes.append(1 - usersTupples[u][i][2]+ randomKeys[i]) #consumers encoding: 0 for prosumer and 1 for consumer
     print("Masked consumer vector", self.MaskedCTypes)
     return self.MaskedCTypes
 
-  def getComittedAmounts(self):
-    for i in range(0,3):
-       self.ComittedAmounts.append(point_add(scalar_mult(tradingVolumes[i],curve.g),scalar_mult(4,curve.g)))
+  def getComittedAmounts(self,u):
+    for i in range(0,2):
+       self.ComittedAmounts.append(point_add(scalar_mult(-1 * usersTupples[u][i][1],curve.g),scalar_mult(7,curve.g)))
     return self.ComittedAmounts
 
   # InnerProducts functionl encryption (trading volumes)
@@ -153,7 +153,7 @@ class MarketOperator:
 
 class Supplier:
   def __init__(self):
-        self.BillCT = [numberOfUsers]
+        self.BillCT, self.maskedReadings, self.maskedPTypes, self.maskedCTypes = [numberOfUsers],[numberOfUsers],[numberOfUsers],[numberOfUsers]
         self.EncryptedReading = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
         self.EncryptedVolumeL = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
         self.EncryptedVolumeLR = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
@@ -162,10 +162,13 @@ class Supplier:
         self.KAuth = KeyAuthority()
         self.MO = MarketOperator()
 
+  def setEncryptedData(self,u):
+        self.EncryptedReading = self.SM.getIpfeEncryptedReading(u)
+        self.EncryptedVolumeL,self.EncryptedVolumeR = self.MO.getIpfeEncryptedVolume(u)
+        self.maskedReadings, self.maskedPTypes, self.maskedCTypes =self.SM.getMaskedReadings(u), self.MO.getMaskedPTypes(u), self.MO.getMaskedCTypes(u)
+
   # Check if user has deviated using IPFE
   def checkDeviations(self,i,u):
-      self.EncryptedReading = self.SM.getIpfeEncryptedReading(u)
-      self.EncryptedVolumeL,self.EncryptedVolumeR = self.MO.getIpfeEncryptedVolume(u)
 
       for j in range(N): # i: period number,  self.EncryptedReading[i] to retreive the encrypted reading of period i.
           #j: every meter reading is represented using N number of encdoed vectors , each is encrypted using IPFE
@@ -178,16 +181,16 @@ class Supplier:
       return 0 # No deviation, trading volume is equal to meater reading
 
   def ComputeBill(self,u):
-    maskedReadings, maskedPTypes, maskedCTypes =self.SM.getMaskedReadings(u), self.MO.getMaskedPTypes(u), self.MO.getMaskedCTypes(u)
     for i in range(0,2):
+        dev = self.checkDeviations(i,u)
 #   self.BillCT += ((maskedReadings[i] * tradingPrices[i]) + ((vs[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * vs[i] *(FiT[i] - tradingPrices[i])) + ((vs[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * vs[i] *(RP[i] - tradingPrices[i])))
-        self.BillCT[u] += (maskedReadings[i] * tradingPrices[i])
-        if (vs[i]>0) * (self.checkDeviations(i,u)>0):
+        self.BillCT[u] += (self.maskedReadings[i] * tradingPrices[i])
+        if (vs[i]>0) and (dev >0):
             self.decPKeyHelper[u][i]=1
-            self.BillCT[u] += maskedPTypes[i] * vs[i] *(FiT[i] - tradingPrices[i]) # if it is a consumer, then this added value would be removed during decryption
-        elif (vs[i]<0) * (self.checkDeviations(i,u)<0):
+            self.BillCT[u] += self.maskedPTypes[i] * vs[i] *(FiT[i] - tradingPrices[i]) # if it is a consumer, then this added value would be removed during decryption
+        elif (vs[i]<0) * (dev<0):
             self.decCKeyHelper[u][i]=1
-            self.BillCT[u] += maskedCTypes[i] * vs[i] *(RP[i] - tradingPrices[i]) # if it is a prosumer, then this added value would be removed during decryption
+            self.BillCT[u] += self.maskedCTypes[i] * vs[i] *(RP[i] - tradingPrices[i]) # if it is a prosumer, then this added value would be removed during decryption
         self.BillCT[u] = self.BillCT[u] % pow(2,23)
     print("Encrypted bill is: ", self.BillCT[u])
 
@@ -196,17 +199,32 @@ class Supplier:
     Bill = (self.BillCT[u] - DecKey) % pow(2,23)
     print("The bill after decryption is: ", Bill/1000)
 
-  def aggregIVCommitments(self): #Compute individual deviations commitmements and aggregate them
-    ComittedReadings = self.SM.getCommitedReadings()
-    ComittedAmounts = self.MO.getComittedAmounts()
-    IV = point_add(ComittedAmounts[0],ComittedReadings[0])
+  def checkIVCommitments(self,u): #Compute individual deviations commitmements and aggregate them
+    ComittedReadings = self.SM.getCommitedReadings(u)
+    ComittedAmounts = self.MO.getComittedAmounts(u)
 
-    #checkDeviationsCorrectness(self):
-    Result = tradingVolumes[0] - meterReadings[0]
+    #test
+    '''t = point_add(scalar_mult(usersTupples[u][0][0],curve.g),scalar_mult(5,curve.g))
+    t2 = point_add(scalar_mult(-1 * usersTupples[u][0][1],curve.g),scalar_mult(7,curve.g))
+    t3 = point_add(scalar_mult(usersTupples[u][1][0],curve.g),scalar_mult(5,curve.g))
+    t4 = point_add(scalar_mult(-1 * usersTupples[u][1][1],curve.g),scalar_mult(7,curve.g))
+    t5 = point_add(t,t2)
+    t6 = point_add(t3,t4)
+    total = point_add(t5,t6)
+    total2 = point_add(scalar_mult(usersTupples[u][0][0] + usersTupples[u][1][0] + (-1 * usersTupples[u][0][1]) + (-1 * usersTupples[u][1][1]),curve.g),scalar_mult(7+5+7+5,curve.g))
+    '''
+    agg = point_add(ComittedAmounts[0],ComittedReadings[0])
+    for i in range(1,2):
+        Iv = point_add(ComittedAmounts[i],ComittedReadings[i])
+        agg = point_add(agg,Iv)
+
+    Result = 0
+    for i in range(0,2):
+        Result += (usersTupples[u][i][0] + (-1 * usersTupples[u][i][1]))
     #R = randomKeys[0] + randomKeys[0]
-    IV2 = point_add(scalar_mult(Result ,curve.g),scalar_mult(7,curve.g))
+    agg2 = point_add(scalar_mult(Result ,curve.g),scalar_mult(24,curve.g))
     print ("\nComparsision result...")
-    if (IV[0]==IV2[0]):
+    if (agg[0]==agg2[0]):
     	print ("Success. Individual deviations are correct.")
     else:
     	print ("Failure!")
@@ -214,11 +232,7 @@ class Supplier:
 tradingPrices = [156,201,233,160,247,210,195,262,187,143] #300 pounds per Watt is the average retail price in UK
 FiT = [100,90,95,100,100,99,97,95,98,99]
 RP = [290,300,295,285,305,290,295,300,310,320]
-meterReadings = [700,500,900,600,400,500,800,900,700,600]
-tradingVolumes = [650,400,850,550,390,490,777,888,650,500]
 vs = [-45,50,37.6,-10,-23,44,-31,39,41,-18] # Deviation share for each period (total deviation (per watt)/number of prosumers or consumers), we should get these values from MPC
-prosumerEncoding = [0,1,1,1,1,1,1,1,1,0] # 1 for prosumer and 0 for conumer
-consumerEncoding = [1,0,0,0,0,0,0,0,0,1] # 0 for consumer and 1 prosumer
 numberOfUsers = 10
 usersTupples = [[[0 for _ in range(3)] for _ in range(2)] for _ in range(numberOfUsers)] # Three values (mr, tv and type) , two periods and 10 users
 # Inner-product functional encryption keysSetup
@@ -226,7 +240,7 @@ KAuth = KeyAuthority()
 KAuth.ipeSetup()
 supplier = Supplier()
 
-# Setting users data
+# Setting users data (two periods, every two tupples belong to one user)
 try:
     with open("/Users/emanahmed/Documents/GitHub/ZPPB-LEM2/data/input-P0-0.txt", 'r') as file:
         u,p,v=0,0,0
@@ -245,21 +259,19 @@ try:
 except FileNotFoundError:
     print(f"The file '{file_path}' was not found.")
 
-print(usersTupples)
-
-supplier.ComputeBill(0) #Encrypted
+supplier.setEncryptedData(0)
+supplier.ComputeBill(0) #Compute bill for user (0) , encrypted
 supplier.getCorrectBills(0)
-supplier.aggregIVCommitments()
+supplier.checkIVCommitments(0)
 
 # For testing
 Bill =0
 for i in range(0,2): #10 periods
     Bill += usersTupples[0][i][0] * tradingPrices[i]
-    print("Dev",supplier.checkDeviations(i,0))
     if (supplier.checkDeviations(i,0)>0) * (vs[i]>0):
-        Bill += vs[i] * (FiT[i] - tradingPrices[i]) * usersTupples[u][i][2]
+        Bill += vs[i] * (FiT[i] - tradingPrices[i]) * usersTupples[0][i][2]
     elif (supplier.checkDeviations(i,0)<0) * (vs[i]<0):
-        Bill += vs[i] * (RP[i] - tradingPrices[i]) * 1
+        Bill += vs[i] * (RP[i] - tradingPrices[i]) * (1 - usersTupples[0][i][2])
 Bill = Bill % pow(2,23)
 print("Bill computation in clear (for testing) is: ", Bill/1000)
 

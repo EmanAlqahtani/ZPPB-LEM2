@@ -1,6 +1,4 @@
 # Change randoms
-# Add zones, then evaluate
-# correct deviation share according to my values
 # check remainder: gives incorrect results
 import random
 import os
@@ -52,7 +50,7 @@ class KeyAuthority:
 
   def getPTypeDecryptionKey(self,decPKeyHelper):
     for i in range(0,2):
-      KeyAuthority.pTypeDecKey += decPKeyHelper[i] * KeyAuthority.pTypeKeys[i] * (FiT[i] - TP[i]) * vs[i]
+      KeyAuthority.pTypeDecKey += decPKeyHelper[i] * KeyAuthority.pTypeKeys[i] * (FiT[i] - TP[i]) * totalDeviation[i]
       KeyAuthority.pTypeDecKey = KeyAuthority.pTypeDecKey % pow(2,23)
     #print("Decryption key is: ", KeyAuthority.pTypeDecKey)
     return KeyAuthority.pTypeDecKey
@@ -66,7 +64,7 @@ class KeyAuthority:
 
   def getCTypeDecryptionKey(self,decCKeyHelper):
     for i in range(0,2):
-      KeyAuthority.cTypeDecKey += decCKeyHelper[i] * KeyAuthority.cTypeKeys[i] * (RP[i] - TP[i]) * vs[i]
+      KeyAuthority.cTypeDecKey += decCKeyHelper[i] * KeyAuthority.cTypeKeys[i] * (RP[i] - TP[i]) * totalDeviation[i]
       KeyAuthority.cTypeDecKey = KeyAuthority.cTypeDecKey % pow(2,23)
     #print("Decryption key is: ", KeyAuthority.cTypeDecKey)
     return KeyAuthority.cTypeDecKey
@@ -185,14 +183,14 @@ class Supplier:
   def ComputeBill(self,u):
     for i in range(0,2):
         dev = self.checkDeviations(i,u)
-#   self.BillCT += ((maskedReadings[i] * TP[i]) + ((vs[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * vs[i] *(FiT[i] - TP[i])) + ((vs[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * vs[i] *(RP[i] - TP[i])))
+#   self.BillCT += ((maskedReadings[i] * TP[i]) + ((totalDeviation[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * totalDeviation[i] *(FiT[i] - TP[i])) + ((totalDeviation[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * totalDeviation[i] *(RP[i] - TP[i])))
         self.BillCT[u] += (self.maskedReadings[i] * TP[i])
-        if (vs[i]>0) and (dev >0):
+        if (totalDeviation[i]>0) and (ZonesInfo[usersTupples[u][i][3]][i][0]>0) and (dev >0):
             self.decPKeyHelper[u][i]=1
-            self.BillCT[u] += self.maskedPTypes[i] * vs[i] *(FiT[i] - TP[i]) # if it is a consumer, then this added value would be removed during decryption
-        elif (vs[i]<0) * (dev<0):
+            self.BillCT[u] += self.maskedPTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight/ZonesInfo[usersTupples[u][i][3]][1]) *(FiT[i] - TP[i]) # if it is a consumer, then this added value would be removed during decryption
+        elif (totalDeviation[i]<0) and (ZonesInfo[usersTupples[u][i][3]][i][0]<0) and (dev<0):
             self.decCKeyHelper[u][i]=1
-            self.BillCT[u] += self.maskedCTypes[i] * vs[i] *(RP[i] - TP[i]) # if it is a prosumer, then this added value would be removed during decryption
+            self.BillCT[u] += self.maskedCTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight/ZonesInfo[usersTupples[u][i][3]][2]) *(RP[i] - TP[i]) # if it is a prosumer, then this added value would be removed during decryption
         self.BillCT[u] = self.BillCT[u] % pow(2,23)
     print("Encrypted bill is: ", self.BillCT[u])
 
@@ -205,16 +203,6 @@ class Supplier:
     ComittedReadings = self.SM.getCommitedReadings(u)
     ComittedAmounts = self.MO.getComittedAmounts(u)
 
-    #test
-    '''t = point_add(scalar_mult(usersTupples[u][0][0],curve.g),scalar_mult(5,curve.g))
-    t2 = point_add(scalar_mult(-1 * usersTupples[u][0][1],curve.g),scalar_mult(7,curve.g))
-    t3 = point_add(scalar_mult(usersTupples[u][1][0],curve.g),scalar_mult(5,curve.g))
-    t4 = point_add(scalar_mult(-1 * usersTupples[u][1][1],curve.g),scalar_mult(7,curve.g))
-    t5 = point_add(t,t2)
-    t6 = point_add(t3,t4)
-    total = point_add(t5,t6)
-    total2 = point_add(scalar_mult(usersTupples[u][0][0] + usersTupples[u][1][0] + (-1 * usersTupples[u][0][1]) + (-1 * usersTupples[u][1][1]),curve.g),scalar_mult(7+5+7+5,curve.g))
-    '''
     agg = point_add(ComittedAmounts[0],ComittedReadings[0])
     for i in range(1,2):
         Iv = point_add(ComittedAmounts[i],ComittedReadings[i])
@@ -231,17 +219,15 @@ class Supplier:
     else:
     	print ("Failure!")
 
+''' --------------------------------------------------------------------------------------------------'''
+
 TP = [156,201,233,160,247,210,195,262,187,143] #300 pounds per Watt is the average retail price in UK
 FiT = [100,90,95,100,100,99,97,95,98,99]
 RP = [290,300,295,285,305,290,295,300,310,320]
-vs = [-45,50,37.6,-10,-23,44,-31,39,41,-18] # Deviation share for each period (total deviation (per watt)/number of prosumers or consumers), we should get these values from MPC
+ZonesInfo = [[[0 for _ in range(3)] for _ in range(2)] for _ in range(4)]   # 3 values , 4 zones , 2 periods
 numberOfUsers = 10
-usersTupples = [[[0 for _ in range(3)] for _ in range(2)] for _ in range(numberOfUsers)] # Three values (mr, tv and type) , two periods and 10 users
-
-# Inner-product functional encryption keysSetup
-KAuth = KeyAuthority()
-KAuth.ipeSetup()
-supplier = Supplier()
+usersTupples = [[[0 for _ in range(4)] for _ in range(2)] for _ in range(numberOfUsers)] # Three values (mr, tv and type) , two periods and 10 users
+ZonalDeviationWeight,totalDeviation = [0 for _ in range(2)], [0 for _ in range(2)]
 
 # Setting users data (two periods, every two tupples belong to one user)
 try:
@@ -250,17 +236,67 @@ try:
         n=0
         for line in file:
             numbers = line.split()
-            for i in range(numberOfUsers*6):
+            for i in range(numberOfUsers*8):
                 usersTupples[u][p][v]= int(numbers[i]) # u is the user ID , p is the period number , v is the value ( mr,tv or type)
                 v+=1
                 n+=1
-                if n==3: v,p=0,1
-                elif n==6:
+                if n==4: v,p=0,1
+                elif n==8:
                     v,p,n=0,0,0
                     u+=1
-
 except FileNotFoundError:
     print(f"The file '{file_path}' was not found.")
+
+# Setting zones info, should get this info from MPC
+def ZoneInfo(zoneNum):
+    for i in range(numberOfUsers):
+        for j in range(2):
+            ZonesInfo[zoneNum][j][0]+=(usersTupples[i][j][0] - usersTupples[i][j][1])
+            ZonesInfo[zoneNum][j][1]+=usersTupples[i][j][2]
+            ZonesInfo[zoneNum][j][2]+=(1-usersTupples[i][j][2])
+    ZonesInfo[zoneNum][0][1]=int(ZonesInfo[zoneNum][0][1]/2)
+    ZonesInfo[zoneNum][0][2]=int(ZonesInfo[zoneNum][0][2]/2)
+    ZonesInfo[zoneNum][1][1]=int(ZonesInfo[zoneNum][1][1]/2)
+    ZonesInfo[zoneNum][1][2]=int(ZonesInfo[zoneNum][1][2]/2)
+
+# Total deviation
+def tdv():
+    for i in range(2):
+        for j in range(4):#Zones
+            totalDeviation[i]+=ZonesInfo[j][i][0]
+    print('Total deviation',totalDeviation)
+
+# Zonal deviationWeight
+# Should get this data from MPC
+def devWeight():
+    for i in range(2): # number of periods
+        TotalOversupplyingZonesDeviations,TotalUndersupplyingZonesDeviations = 0,0
+        if (totalDeviation[i] >0):
+          for j in range(4):
+            if (ZonesInfo[j][i][0] >0): # Check if the total deviations of the zone is positive
+                TotalOversupplyingZonesDeviations+=ZonesInfo[j][i][0]
+          print('Total of oversupplying zones deviations of period',i,'is',TotalOversupplyingZonesDeviations)
+          ZonalDeviationWeight[i]= totalDeviation[i]/TotalOversupplyingZonesDeviations
+        elif (totalDeviation[i] <0):
+           for j in range(4):
+              if (ZonesInfo[j][i][0] <0):
+                 TotalUndersupplyingZonesDeviations+=ZonesInfo[j][i][0]
+           print('Total of undersupplying zones deviations of period',i,'is',TotalUndersupplyingZonesDeviations)
+           ZonalDeviationWeight[i]= totalDeviation[i]/TotalUndersupplyingZonesDeviations
+        print(ZonalDeviationWeight[i])
+
+ZoneInfo(0)
+ZoneInfo(1)
+ZoneInfo(2)
+ZoneInfo(3)
+print(ZonesInfo)
+tdv()
+devWeight()
+
+# Inner-product functional encryption keysSetup
+KAuth = KeyAuthority()
+KAuth.ipeSetup()
+supplier = Supplier()
 
 supplier.setEncryptedData(0)
 supplier.ComputeBill(0) #Compute bill for user (0) , encrypted
@@ -270,16 +306,17 @@ supplier.checkIVCommitments(0)
 # For testing
 Bill =0
 for i in range(0,2): #2 periods
+    dev = supplier.checkDeviations(i,0)
     Bill += usersTupples[0][i][0] * TP[i]
-    if (supplier.checkDeviations(i,0)>0) * (vs[i]>0):
-        Bill += vs[i] * (FiT[i] - TP[i]) * usersTupples[0][i][2]
-    elif (supplier.checkDeviations(i,0)<0) * (vs[i]<0):
-        Bill += vs[i] * (RP[i] - TP[i]) * (1 - usersTupples[0][i][2])
-#Bill = Bill % pow(2,23)
+    if (dev>0) * (totalDeviation[i]>0):
+        Bill += totalDeviation[i] * (FiT[i] - TP[i]) * usersTupples[0][i][2]
+    elif (dev<0) * (totalDeviation[i]<0):
+        Bill += totalDeviation[i] * (RP[i] - TP[i]) * (1 - usersTupples[0][i][2])
+Bill = Bill % pow(2,23)
 print("Bill computation in clear (for testing) is: ", Bill/1000)
 
-Bill=0
+'''Bill=0
 for i in range(0,2): #2 periods
     Bill += usersTupples[0][i][0] * TP[i]
 Bill = Bill % pow(2,23)
-print("Bill computation without deviations in clear (for testing) is: ", Bill/1000)
+print("Bill computation without deviations in clear (for testing) is: ", Bill/1000)'''

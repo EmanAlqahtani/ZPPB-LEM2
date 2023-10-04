@@ -6,17 +6,12 @@ import hashlib
 import binascii
 import sys
 import encoding
+import cProfile
 from ecc import point_add, scalar_mult, curve
 # Path hack
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.insert(1, os.path.abspath('..'))
 from fhipe.fhipe import ipe
-
-# variables necassary for functional encryption and encoding
-# 1- Number of Vector's Elements ( one extra element for encoding the number zero)
-D = 12
-# 2- Number of vectors and Number of bits representing the decmilal number to be encoded
-N = D-1
 
 class KeyAuthority:
   readingsKeys,pTypeKeys,cTypeKeys = [],[],[]
@@ -156,7 +151,7 @@ class MarketOperator:
 
 class Supplier:
   def __init__(self):
-        self.BillCT, self.maskedReadings, self.maskedPTypes, self.maskedCTypes = [numberOfUsers],[numberOfUsers],[numberOfUsers],[numberOfUsers]
+        self.BillCT, self.maskedReadings, self.maskedPTypes, self.maskedCTypes = [0 for _ in range(numberOfUsers)],[0 for _ in range(numberOfUsers)],[0 for _ in range(numberOfUsers)],[0 for _ in range(numberOfUsers)]
         self.EncryptedReading = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
         self.EncryptedVolumeL = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
         self.EncryptedVolumeLR = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
@@ -164,7 +159,6 @@ class Supplier:
         self.SM = SmartMeter()
         self.KAuth = KeyAuthority()
         self.MO = MarketOperator()
-
   def setEncryptedData(self,u):
         self.EncryptedReading = self.SM.getIpfeEncryptedReading(u)
         self.EncryptedVolumeL,self.EncryptedVolumeR = self.MO.getIpfeEncryptedVolume(u)
@@ -195,7 +189,7 @@ class Supplier:
             self.decCKeyHelper[u][i]=1
             self.BillCT[u] += self.maskedCTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][2]) *(RP[i] - TP[i]) # if it is a prosumer, then this added value would be removed during decryption
         self.BillCT[u] = self.BillCT[u] % pow(2,23)
-    print("Encrypted bill is: ", self.BillCT[u])
+    print("Encrypted bill for user: ", u ,"is: ", self.BillCT[u])
 
   def getCorrectBills(self,u):
     DecKey = self.KAuth.getDecryptionKey(self.decPKeyHelper[u], self.decCKeyHelper[u],u)
@@ -231,6 +225,11 @@ ZonesInfo = [[[0 for _ in range(3)] for _ in range(2)] for _ in range(4)]   # 3 
 numberOfUsers = 10
 usersTupples = [[[0 for _ in range(4)] for _ in range(2)] for _ in range(numberOfUsers)] # Three values (mr, tv and type) , two periods and 10 users
 ZonalDeviationWeight,totalDeviation = [0 for _ in range(2)], [0 for _ in range(2)]
+# variables necassary for functional encryption and encoding
+# 1- Number of Vector's Elements ( one extra element for encoding the number zero)
+D = 12
+# 2- Number of vectors and Number of bits representing the decmilal number to be encoded
+N = D-1
 
 # Setting users data (two periods, every two tupples belong to one user)
 def setUsersData():
@@ -305,6 +304,10 @@ def main():
     supplier.ComputeBill(0) #Compute bill for user (0) , encrypted
     supplier.getCorrectBills(0)
     supplier.checkIVCommitments(0)
+#    supplier.setEncryptedData(1)
+#    supplier.ComputeBill(1) #Compute bill for user (0) , encrypted
+#    supplier.getCorrectBills(1)
+#    supplier.checkIVCommitments(1)
 
     # For testing
     '''Bill =0
@@ -323,5 +326,7 @@ def main():
         Bill += usersTupples[0][i][0] * TP[i]
     Bill = Bill % pow(2,23)
     print("Bill computation without deviations in clear (for testing) is: ", Bill/1000)'''
-    
-main()
+
+#main()
+
+cProfile.run("main()")

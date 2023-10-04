@@ -50,7 +50,7 @@ class KeyAuthority:
 
   def getPTypeDecryptionKey(self,decPKeyHelper):
     for i in range(0,2):
-      KeyAuthority.pTypeDecKey += decPKeyHelper[i] * KeyAuthority.pTypeKeys[i] * (FiT[i] - TP[i]) * totalDeviation[i]
+      KeyAuthority.pTypeDecKey += decPKeyHelper[i] * KeyAuthority.pTypeKeys[i] * (FiT[i] - TP[i]) #* ZonalDeviationWeight/ZonesInfo[usersTupples[u][i][3]][1]
       KeyAuthority.pTypeDecKey = KeyAuthority.pTypeDecKey % pow(2,23)
     #print("Decryption key is: ", KeyAuthority.pTypeDecKey)
     return KeyAuthority.pTypeDecKey
@@ -64,7 +64,7 @@ class KeyAuthority:
 
   def getCTypeDecryptionKey(self,decCKeyHelper):
     for i in range(0,2):
-      KeyAuthority.cTypeDecKey += decCKeyHelper[i] * KeyAuthority.cTypeKeys[i] * (RP[i] - TP[i]) * totalDeviation[i]
+      KeyAuthority.cTypeDecKey += decCKeyHelper[i] * KeyAuthority.cTypeKeys[i] * (RP[i] - TP[i]) #* ZonalDeviationWeight/ZonesInfo[usersTupples[u][i][3]][2]
       KeyAuthority.cTypeDecKey = KeyAuthority.cTypeDecKey % pow(2,23)
     #print("Decryption key is: ", KeyAuthority.cTypeDecKey)
     return KeyAuthority.cTypeDecKey
@@ -148,6 +148,7 @@ class MarketOperator:
               self.skxL[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXLEncoding(usersTupples[u][i][1],D)[j])
               self.skxR[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXREncoding(usersTupples[u][i][1],D)[j])
       if usersTupples[u][i][2]==0: # check if the user is a prosumer, flip the two X vectors over to get a correct less than , greater than comparision (as we simply woild have either two positve values or two negatvie values to compare)
+        print("check")
         return self.skxR,self.skxL
       return self.skxL,self.skxR
 
@@ -184,13 +185,15 @@ class Supplier:
     for i in range(0,2):
         dev = self.checkDeviations(i,u)
 #   self.BillCT += ((maskedReadings[i] * TP[i]) + ((totalDeviation[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * totalDeviation[i] *(FiT[i] - TP[i])) + ((totalDeviation[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * totalDeviation[i] *(RP[i] - TP[i])))
+        print(dev)
         self.BillCT[u] += (self.maskedReadings[i] * TP[i])
         if (totalDeviation[i]>0) and (ZonesInfo[usersTupples[u][i][3]][i][0]>0) and (dev >0):
+            print("Check")
             self.decPKeyHelper[u][i]=1
-            self.BillCT[u] += self.maskedPTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight/ZonesInfo[usersTupples[u][i][3]][1]) *(FiT[i] - TP[i]) # if it is a consumer, then this added value would be removed during decryption
+#            self.BillCT[u] += self.maskedPTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][1]) *(FiT[i] - TP[i]) # if it is a consumer, then this added value would be removed during decryption
         elif (totalDeviation[i]<0) and (ZonesInfo[usersTupples[u][i][3]][i][0]<0) and (dev<0):
             self.decCKeyHelper[u][i]=1
-            self.BillCT[u] += self.maskedCTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight/ZonesInfo[usersTupples[u][i][3]][2]) *(RP[i] - TP[i]) # if it is a prosumer, then this added value would be removed during decryption
+            self.BillCT[u] += self.maskedCTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][2]) *(RP[i] - TP[i]) # if it is a prosumer, then this added value would be removed during decryption
         self.BillCT[u] = self.BillCT[u] % pow(2,23)
     print("Encrypted bill is: ", self.BillCT[u])
 
@@ -231,7 +234,7 @@ ZonalDeviationWeight,totalDeviation = [0 for _ in range(2)], [0 for _ in range(2
 
 # Setting users data (two periods, every two tupples belong to one user)
 try:
-    with open("/Users/emanahmed/Documents/GitHub/ZPPB-LEM2/data/input-P0-0.txt", 'r') as file:
+    with open("/Users/emanahmed/Documents/GitHub/ZPPB-LEM2/data/input-P0-1.txt", 'r') as file:
         u,p,v=0,0,0
         n=0
         for line in file:

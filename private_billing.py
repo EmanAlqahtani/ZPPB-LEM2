@@ -146,11 +146,14 @@ class MarketOperator:
   def getIpfeEncryptedVolume(self,u):
 #      self.EncodedVolumesL,self.EncodedVolumesR = encoding.VectorXLEncoding(5,D),encoding.VectorXREncoding(5,D)
       for i in range(2):
-          for j in range(N):
-              self.skxL[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXLEncoding(usersTupples[u][i][1],D)[j])
-              self.skxR[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXREncoding(usersTupples[u][i][1],D)[j])
-      if usersTupples[u][i][2]==0: # check if the user is a prosumer, flip the two X vectors over to get a correct less than , greater than comparision (as we simply woild have either two positve values or two negatvie values to compare)
-        return self.skxR,self.skxL
+          if usersTupples[u][i][2]==1:
+              for j in range(N):
+                  self.skxL[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXLEncoding(usersTupples[u][i][1],D)[j])
+                  self.skxR[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXREncoding(usersTupples[u][i][1],D)[j])
+          else: # check if the user is a consumer, flip the two X vectors over to get a correct less than , greater than comparision for the negative values (as we simply have either two positve values or two negatvie values to compare)
+               for j in range(N):
+                   self.skxL[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXREncoding(usersTupples[u][i][1],D)[j])
+                   self.skxR[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXLEncoding(usersTupples[u][i][1],D)[j])
       return self.skxL,self.skxR
 
 class Supplier:
@@ -261,7 +264,7 @@ try:
 
 except FileNotFoundError:
     print(f"The file '{file_path}' was not found.")
-
+print(usersTupples)
 supplier.setEncryptedData(0)
 supplier.ComputeBill(0) #Compute bill for user (0) , encrypted
 supplier.getCorrectBills(0)

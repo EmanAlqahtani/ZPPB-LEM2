@@ -233,28 +233,28 @@ usersTupples = [[[0 for _ in range(4)] for _ in range(2)] for _ in range(numberO
 ZonalDeviationWeight,totalDeviation = [0 for _ in range(2)], [0 for _ in range(2)]
 
 # Setting users data (two periods, every two tupples belong to one user)
-try:
-    with open("/Users/emanahmed/Documents/GitHub/ZPPB-LEM2/data/input-P0-1.txt", 'r') as file:
-        u,p,v=0,0,0
-        n=0
-        for line in file:
-            numbers = line.split()
-            for i in range(numberOfUsers*8):
-                usersTupples[u][p][v]= int(numbers[i]) # u is the user ID , p is the period number , v is the value ( mr,tv or type)
-                v+=1
-                n+=1
-                if n==4: v,p=0,1
-                elif n==8:
-                    v,p,n=0,0,0
-                    u+=1
-except FileNotFoundError:
-    print(f"The file '{file_path}' was not found.")
+def setUsersData():
+    try:
+        with open("/Users/emanahmed/Documents/GitHub/ZPPB-LEM2/data/input-P0-1.txt", 'r') as file:
+            u,p,v=0,0,0
+            n=0
+            for line in file:
+                numbers = line.split()
+                for i in range(numberOfUsers*8):
+                    usersTupples[u][p][v]= int(numbers[i]) # u is the user ID , p is the period number , v is the value ( mr,tv or type)
+                    v+=1
+                    n+=1
+                    if n==4: v,p=0,1
+                    elif n==8:
+                        v,p,n=0,0,0
+                        u+=1
+    except FileNotFoundError:
+        print(f"The file '{file_path}' was not found.")
 
 # Setting zones info, should get this info from MPC
 def ZoneInfo(zoneNum):
     for i in range(0,numberOfUsers):
         for j in range(2):
-            print("type",usersTupples[i][j][2])
             ZonesInfo[zoneNum][j][0]+=(usersTupples[i][j][0] - usersTupples[i][j][1])
             ZonesInfo[zoneNum][j][1]+=usersTupples[i][j][2]
             ZonesInfo[zoneNum][j][2]+=(1-usersTupples[i][j][2])
@@ -285,39 +285,43 @@ def devWeight():
            ZonalDeviationWeight[i]= totalDeviation[i]/TotalUndersupplyingZonesDeviations
         print(ZonalDeviationWeight[i])
 
-ZoneInfo(0)
-ZoneInfo(1)
-ZoneInfo(2)
-ZoneInfo(3)
-print(usersTupples)
-print(ZonesInfo)
-tdv()
-devWeight()
+def main():
+    setUsersData()
+    ZoneInfo(0)
+    ZoneInfo(1)
+    ZoneInfo(2)
+    ZoneInfo(3)
+    print(usersTupples)
+    print(ZonesInfo)
+    tdv()
+    devWeight()
 
-# Inner-product functional encryption keysSetup
-KAuth = KeyAuthority()
-KAuth.ipeSetup()
-supplier = Supplier()
+    # Inner-product functional encryption keysSetup
+    KAuth = KeyAuthority()
+    KAuth.ipeSetup()
+    supplier = Supplier()
 
-supplier.setEncryptedData(0)
-supplier.ComputeBill(0) #Compute bill for user (0) , encrypted
-supplier.getCorrectBills(0)
-supplier.checkIVCommitments(0)
+    supplier.setEncryptedData(0)
+    supplier.ComputeBill(0) #Compute bill for user (0) , encrypted
+    supplier.getCorrectBills(0)
+    supplier.checkIVCommitments(0)
 
-# For testing
-Bill =0
-for i in range(0,2): #2 periods
-    dev = supplier.checkDeviations(i,0)
-    Bill += usersTupples[0][i][0] * TP[i]
-    if (dev>0) * (totalDeviation[i]>0):
-        Bill += (ZonesInfo[usersTupples[0][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[0][i][3]][i][1]) * (FiT[i] - TP[i]) * usersTupples[0][i][2]
-    elif (dev<0) * (totalDeviation[i]<0):
-        Bill += (ZonesInfo[usersTupples[0][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[0][i][3]][i][2]) * (RP[i] - TP[i]) * (1 - usersTupples[0][i][2])
-Bill = Bill % pow(2,23)
-print("Bill computation in clear (for testing) is: ", Bill/1000)
+    # For testing
+    '''Bill =0
+    for i in range(0,2): #2 periods
+        dev = supplier.checkDeviations(i,0)
+        Bill += usersTupples[0][i][0] * TP[i]
+        if (dev>0) * (totalDeviation[i]>0):
+            Bill += (ZonesInfo[usersTupples[0][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[0][i][3]][i][1]) * (FiT[i] - TP[i]) * usersTupples[0][i][2]
+        elif (dev<0) * (totalDeviation[i]<0):
+            Bill += (ZonesInfo[usersTupples[0][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[0][i][3]][i][2]) * (RP[i] - TP[i]) * (1 - usersTupples[0][i][2])
+    Bill = Bill % pow(2,23)
+    print("Bill computation in clear (for testing) is: ", Bill/1000)
 
-Bill=0
-for i in range(0,2): #2 periods
-    Bill += usersTupples[0][i][0] * TP[i]
-Bill = Bill % pow(2,23)
-print("Bill computation without deviations in clear (for testing) is: ", Bill/1000)
+    Bill=0
+    for i in range(0,2): #2 periods
+        Bill += usersTupples[0][i][0] * TP[i]
+    Bill = Bill % pow(2,23)
+    print("Bill computation without deviations in clear (for testing) is: ", Bill/1000)'''
+    
+main()

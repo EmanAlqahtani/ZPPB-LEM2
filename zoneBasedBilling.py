@@ -29,8 +29,8 @@ class KeyAuthority:
     #print("Secret meter reading keys are: ",KeyAuthority.readingsKeys)
     return KeyAuthority.readingsKeys
 
-  def getDecryptionKey(self,decPKeyHelper,decCKeyHelper):
-    KeyAuthority.DecKey = self.getReadingsDecryptionKey() + self.getPTypeDecryptionKey(decPKeyHelper) + self.getCTypeDecryptionKey(decCKeyHelper)
+  def getDecryptionKey(self,decPKeyHelper,decCKeyHelper,u):
+    KeyAuthority.DecKey = self.getReadingsDecryptionKey() + self.getPTypeDecryptionKey(decPKeyHelper,u) + self.getCTypeDecryptionKey(decCKeyHelper,u)
     print("Decryption key is: ", KeyAuthority.DecKey)
     return KeyAuthority.DecKey
 
@@ -48,9 +48,9 @@ class KeyAuthority:
     #print("Secret p type keys are: ",KeyAuthority.pTypeKeys)
     return KeyAuthority.pTypeKeys
 
-  def getPTypeDecryptionKey(self,decPKeyHelper):
+  def getPTypeDecryptionKey(self,decPKeyHelper,u):
     for i in range(0,2):
-      KeyAuthority.pTypeDecKey += decPKeyHelper[i] * KeyAuthority.pTypeKeys[i] * (FiT[i] - TP[i]) #* ZonalDeviationWeight/ZonesInfo[usersTupples[u][i][3]][1]
+      KeyAuthority.pTypeDecKey += decPKeyHelper[i] * KeyAuthority.pTypeKeys[i] * (FiT[i] - TP[i]) * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][1])
       KeyAuthority.pTypeDecKey = KeyAuthority.pTypeDecKey % pow(2,23)
     #print("Decryption key is: ", KeyAuthority.pTypeDecKey)
     return KeyAuthority.pTypeDecKey
@@ -62,9 +62,9 @@ class KeyAuthority:
     #print("Secret c type keys are: ",KeyAuthority.cTypeKeys)
     return KeyAuthority.cTypeKeys
 
-  def getCTypeDecryptionKey(self,decCKeyHelper):
+  def getCTypeDecryptionKey(self,decCKeyHelper,u):
     for i in range(0,2):
-      KeyAuthority.cTypeDecKey += decCKeyHelper[i] * KeyAuthority.cTypeKeys[i] * (RP[i] - TP[i]) #* ZonalDeviationWeight/ZonesInfo[usersTupples[u][i][3]][2]
+      KeyAuthority.cTypeDecKey += decCKeyHelper[i] * KeyAuthority.cTypeKeys[i] * (RP[i] - TP[i]) * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][2])
       KeyAuthority.cTypeDecKey = KeyAuthority.cTypeDecKey % pow(2,23)
     #print("Decryption key is: ", KeyAuthority.cTypeDecKey)
     return KeyAuthority.cTypeDecKey
@@ -144,12 +144,14 @@ class MarketOperator:
   def getIpfeEncryptedVolume(self,u):
 #      self.EncodedVolumesL,self.EncodedVolumesR = encoding.VectorXLEncoding(5,D),encoding.VectorXREncoding(5,D)
       for i in range(2):
-          for j in range(N):
-              self.skxL[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXLEncoding(usersTupples[u][i][1],D)[j])
-              self.skxR[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXREncoding(usersTupples[u][i][1],D)[j])
-      if usersTupples[u][i][2]==0: # check if the user is a prosumer, flip the two X vectors over to get a correct less than , greater than comparision (as we simply woild have either two positve values or two negatvie values to compare)
-        print("check")
-        return self.skxR,self.skxL
+          if usersTupples[u][i][2]==1:
+              for j in range(N):
+                  self.skxL[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXLEncoding(usersTupples[u][i][1],D)[j])
+                  self.skxR[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXREncoding(usersTupples[u][i][1],D)[j])
+          else: # check if the user is a consumer, flip the two X vectors over to get a correct less than , greater than comparision for the negative values (as we simply have either two positve values or two negatvie values to compare)
+               for j in range(N):
+                   self.skxL[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXREncoding(usersTupples[u][i][1],D)[j])
+                   self.skxR[i][j]= ipe.encrypt(self.KAuth.getSecretKey(), encoding.VectorXLEncoding(usersTupples[u][i][1],D)[j])
       return self.skxL,self.skxR
 
 class Supplier:
@@ -185,12 +187,10 @@ class Supplier:
     for i in range(0,2):
         dev = self.checkDeviations(i,u)
 #   self.BillCT += ((maskedReadings[i] * TP[i]) + ((totalDeviation[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * totalDeviation[i] *(FiT[i] - TP[i])) + ((totalDeviation[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * totalDeviation[i] *(RP[i] - TP[i])))
-        print(dev)
         self.BillCT[u] += (self.maskedReadings[i] * TP[i])
         if (totalDeviation[i]>0) and (ZonesInfo[usersTupples[u][i][3]][i][0]>0) and (dev >0):
-            print("Check")
             self.decPKeyHelper[u][i]=1
-#            self.BillCT[u] += self.maskedPTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][1]) *(FiT[i] - TP[i]) # if it is a consumer, then this added value would be removed during decryption
+            self.BillCT[u] += self.maskedPTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][1]) *(FiT[i] - TP[i]) # if it is a consumer, then this added value would be removed during decryption
         elif (totalDeviation[i]<0) and (ZonesInfo[usersTupples[u][i][3]][i][0]<0) and (dev<0):
             self.decCKeyHelper[u][i]=1
             self.BillCT[u] += self.maskedCTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][2]) *(RP[i] - TP[i]) # if it is a prosumer, then this added value would be removed during decryption
@@ -198,7 +198,7 @@ class Supplier:
     print("Encrypted bill is: ", self.BillCT[u])
 
   def getCorrectBills(self,u):
-    DecKey = self.KAuth.getDecryptionKey(self.decPKeyHelper[u], self.decCKeyHelper[u])
+    DecKey = self.KAuth.getDecryptionKey(self.decPKeyHelper[u], self.decCKeyHelper[u],u)
     Bill = (self.BillCT[u] - DecKey) % pow(2,23)
     print("The bill after decryption is: ", Bill/1000)
 
@@ -252,15 +252,12 @@ except FileNotFoundError:
 
 # Setting zones info, should get this info from MPC
 def ZoneInfo(zoneNum):
-    for i in range(numberOfUsers):
+    for i in range(0,numberOfUsers):
         for j in range(2):
+            print("type",usersTupples[i][j][2])
             ZonesInfo[zoneNum][j][0]+=(usersTupples[i][j][0] - usersTupples[i][j][1])
             ZonesInfo[zoneNum][j][1]+=usersTupples[i][j][2]
             ZonesInfo[zoneNum][j][2]+=(1-usersTupples[i][j][2])
-    ZonesInfo[zoneNum][0][1]=int(ZonesInfo[zoneNum][0][1]/2)
-    ZonesInfo[zoneNum][0][2]=int(ZonesInfo[zoneNum][0][2]/2)
-    ZonesInfo[zoneNum][1][1]=int(ZonesInfo[zoneNum][1][1]/2)
-    ZonesInfo[zoneNum][1][2]=int(ZonesInfo[zoneNum][1][2]/2)
 
 # Total deviation
 def tdv():
@@ -292,6 +289,7 @@ ZoneInfo(0)
 ZoneInfo(1)
 ZoneInfo(2)
 ZoneInfo(3)
+print(usersTupples)
 print(ZonesInfo)
 tdv()
 devWeight()
@@ -312,14 +310,14 @@ for i in range(0,2): #2 periods
     dev = supplier.checkDeviations(i,0)
     Bill += usersTupples[0][i][0] * TP[i]
     if (dev>0) * (totalDeviation[i]>0):
-        Bill += totalDeviation[i] * (FiT[i] - TP[i]) * usersTupples[0][i][2]
+        Bill += (ZonesInfo[usersTupples[0][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[0][i][3]][i][1]) * (FiT[i] - TP[i]) * usersTupples[0][i][2]
     elif (dev<0) * (totalDeviation[i]<0):
-        Bill += totalDeviation[i] * (RP[i] - TP[i]) * (1 - usersTupples[0][i][2])
+        Bill += (ZonesInfo[usersTupples[0][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[0][i][3]][i][2]) * (RP[i] - TP[i]) * (1 - usersTupples[0][i][2])
 Bill = Bill % pow(2,23)
 print("Bill computation in clear (for testing) is: ", Bill/1000)
 
-'''Bill=0
+Bill=0
 for i in range(0,2): #2 periods
     Bill += usersTupples[0][i][0] * TP[i]
 Bill = Bill % pow(2,23)
-print("Bill computation without deviations in clear (for testing) is: ", Bill/1000)'''
+print("Bill computation without deviations in clear (for testing) is: ", Bill/1000)

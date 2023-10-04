@@ -144,7 +144,6 @@ class MarketOperator:
 
   # InnerProducts functionl encryption (trading volumes)
   def getIpfeEncryptedVolume(self,u):
-#      self.EncodedVolumesL,self.EncodedVolumesR = encoding.VectorXLEncoding(5,D),encoding.VectorXREncoding(5,D)
       for i in range(2):
           if usersTupples[u][i][2]==1:
               for j in range(N):

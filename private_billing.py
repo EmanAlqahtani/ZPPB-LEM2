@@ -157,7 +157,7 @@ class MarketOperator:
 
 class Supplier:
   def __init__(self):
-        self.BillCT, self.maskedReadings, self.maskedPTypes, self.maskedCTypes = [numberOfUsers],[numberOfUsers],[numberOfUsers],[numberOfUsers]
+        self.BillCT, self.maskedReadings, self.maskedPTypes, self.maskedCTypes = [0 for _ in range(numberOfUsers)],[0 for _ in range(numberOfUsers)],[0 for _ in range(numberOfUsers)],[0 for _ in range(numberOfUsers)]
         self.EncryptedReading = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
         self.EncryptedVolumeL = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
         self.EncryptedVolumeLR = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
@@ -268,6 +268,11 @@ supplier.setEncryptedData(0)
 supplier.ComputeBill(0) #Compute bill for user (0) , encrypted
 supplier.getCorrectBills(0)
 supplier.checkIVCommitments(0)
+
+supplier.setEncryptedData(1)
+supplier.ComputeBill(1) #Compute bill for user (0) , encrypted
+supplier.getCorrectBills(1)
+supplier.checkIVCommitments(1)
 
 # For testing
 Bill =0

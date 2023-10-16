@@ -83,21 +83,21 @@ class KeyAuthority:
 class SmartMeter:
   def __init__(self):
     self.KAuth = KeyAuthority()
-    self.MaskedReadings,self.ComittedReadings= [],[]
+    self.MaskedReadings,self.ComittedReadings= [0 for _ in range(2)],[0 for _ in range(2)]
 #    self.EncodedReadings = [[0]*D for _ in range(N)]
     self.sky = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
 
   def getMaskedReadings(self,u):
     randomKeys = self.KAuth.getReadingsEncryptionKeys()
     for i in range(0,2):
-      self.MaskedReadings.append(usersTupples[u][i][0] + randomKeys[i])
+      self.MaskedReadings[i]= usersTupples[u][i][0] + randomKeys[i]
     print("Masked Readings", self.MaskedReadings)
     return self.MaskedReadings
 
   # Pedersen Commitment
   def getCommitedReadings(self,u):
     for i in range(0,2):
-      self.ComittedReadings.append(point_add(scalar_mult(usersTupples[u][i][0],curve.g),scalar_mult(5,curve.g)))
+      self.ComittedReadings[i]= point_add(scalar_mult(usersTupples[u][i][0],curve.g),scalar_mult(5,curve.g))
     return self.ComittedReadings
 
   # InnerProducts functionl encryption (meater readings)
@@ -114,9 +114,9 @@ class SmartMeter:
 
 class MarketOperator:
   def __init__(self):
-      self.ComittedAmounts = []
+      self.ComittedAmounts = [0 for _ in range(2)]
       self.KAuth = KeyAuthority()
-      self.MaskedPTypes, self.MaskedCTypes = [],[]
+      self.MaskedPTypes, self.MaskedCTypes = [0 for _ in range(2)],[0 for _ in range(2)]
 #      self.EncodedVolumesL = self.EncodedVolumesR = [[0]*D for _ in range(N)]
       self.skxL = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
       self.skxR = [[[[0 for _ in range(2)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
@@ -125,7 +125,7 @@ class MarketOperator:
   def getMaskedPTypes(self,u):
     randomKeys = self.KAuth.getPTypeEncryptionKeys()
     for i in range(0,2):
-      self.MaskedPTypes.append(usersTupples[u][i][2] + randomKeys[i]) #prosumers encoding: 1 for prosumer and 0 for consumer
+      self.MaskedPTypes[i] = usersTupples[u][i][2] + randomKeys[i] #prosumers encoding: 1 for prosumer and 0 for consumer
     print("Masked prosumer vector", self.MaskedPTypes)
     return self.MaskedPTypes
 
@@ -133,13 +133,13 @@ class MarketOperator:
   def getMaskedCTypes(self,u):
     randomKeys = self.KAuth.getCTypeEncryptionKeys()
     for i in range(0,2):
-      self.MaskedCTypes.append(1 - usersTupples[u][i][2]+ randomKeys[i]) #consumers encoding: 0 for prosumer and 1 for consumer
+      self.MaskedCTypes[i]= 1 - usersTupples[u][i][2]+ randomKeys[i] #consumers encoding: 0 for prosumer and 1 for consumer
     print("Masked consumer vector", self.MaskedCTypes)
     return self.MaskedCTypes
 
   def getComittedAmounts(self,u):
     for i in range(0,2):
-       self.ComittedAmounts.append(point_add(scalar_mult(-1 * usersTupples[u][i][1],curve.g),scalar_mult(7,curve.g)))
+       self.ComittedAmounts[i] = point_add(scalar_mult(-1 * usersTupples[u][i][1],curve.g),scalar_mult(7,curve.g))
     return self.ComittedAmounts
 
   # InnerProducts functionl encryption (trading volumes)

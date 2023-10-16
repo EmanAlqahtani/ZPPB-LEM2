@@ -25,6 +25,7 @@ curve = EllipticCurve(
 
 def is_on_curve(point):
     """Returns True if the given point lies on the elliptic curve."""
+
     if point is None:
         # None represents the point at infinity.
         return True
@@ -67,9 +68,8 @@ def point_add(point1, point2):
               -y3 % curve.p)
 
     assert is_on_curve(result)
-
     return result
-    
+
 def point_neg(point):
     """Returns -point."""
     assert is_on_curve(point)

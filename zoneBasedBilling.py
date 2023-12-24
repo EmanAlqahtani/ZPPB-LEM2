@@ -172,6 +172,7 @@ class Supplier:
         self.KAuth = KeyAuthority()
         self.MO = MarketOperator()
   def setEncryptedData(self,u):
+        print("User (", u ,") information: ")
         self.EncryptedReading = self.SM.getIpfeEncryptedReading(u)
         start_time = time.time()
         self.EncryptedVolumeL,self.EncryptedVolumeR = self.MO.getIpfeEncryptedVolume(u)
@@ -240,7 +241,7 @@ class Supplier:
     agg2 = point_add(scalar_mult(Result ,curve.g),scalar_mult(24,curve.g))
     print ("\nComparsision result...")
     if (agg[0]==agg2[0]):
-    	print ("Success. Individual deviations are correct.")
+    	print ("Success. Individual deviations are correct.\n....................................")
     else:
     	print ("Failure!")
 
@@ -250,7 +251,7 @@ TP = [156,201,233,160,247,210,195,262,187,143] #300 pounds per Watt is the avera
 FiT = [100,90,95,100,100,99,97,95,98,99]
 RP = [290,300,295,285,305,290,295,300,310,320]
 ZonesInfo = [[[0 for _ in range(3)] for _ in range(2)] for _ in range(4)]   # 3 values , 4 zones , 2 periods
-numberOfUsers = 3
+numberOfUsers = 50
 usersTupples = [[[0 for _ in range(4)] for _ in range(2)] for _ in range(numberOfUsers)] # Three values (mr, tv and type) , two periods and 10 users
 ZonalDeviationWeight,totalDeviation = [0 for _ in range(2)], [0 for _ in range(2)]
 # variables necassary for functional encryption and encoding
@@ -343,6 +344,7 @@ def main():
     #supplier.checkIVCommitments(1)
 
     # For testing
+    print("For testing:")
     Bill =0
     for i in range(0,2): #2 periods
         supplier.setEncryptedData(0)

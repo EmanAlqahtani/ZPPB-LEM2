@@ -1,9 +1,5 @@
 # Change randoms
 # check remainder: gives incorrect results
-# later, mybe the loop through the periods outside
-#(this requirs massive changes, but it is the right way
-#( we need objects of SMs and users in LEMO and KA and connect them through user ID probably to  create a valid decryption key ))
-# The way I did it, for simplicity, I go through all supplier calls at once and make the KEY authority keys static
 import random
 import os
 import hashlib
@@ -140,7 +136,7 @@ class MarketOperator:
 
 class Supplier:
   def __init__(self):
-        self.BillCT, self.maskedReadings, self.maskedPTypes, self.maskedCTypes = [0 for _ in range(numberOfUsers)],[0 for _ in range(numberOfPeriods)],[0 for _ in range(numberOfPeriods)],[0 for _ in range(numberOfPeriods)]
+        self.BillCT, self.maskedReadings, self.maskedPTypes, self.maskedCTypes = [[0 for _ in range(numberOfPeriods)] for _ in range(numberOfUsers)],[0 for _ in range(numberOfPeriods)],[0 for _ in range(numberOfPeriods)],[0 for _ in range(numberOfPeriods)]
         self.EncryptedReading = [[[[0 for _ in range(numberOfPeriods)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
         self.EncryptedVolumeL = [[[[0 for _ in range(numberOfPeriods)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
         self.EncryptedVolumeR = [[[[0 for _ in range(numberOfPeriods)] for _ in range(D+1)] for _ in range(N)]for _ in range(3)]
@@ -159,10 +155,6 @@ class Supplier:
   # Evaluate SM computation per trading period
   def getSMEncryptedData(self,u,i):
       start_time = time.time()
-      self.EncryptedReading[i] = self.SM.getIpfeEncryptedReading(u,i)
-      end_time = time.time()
-      print("Encrypting encoded meter reading using IPFE computation time = ", end_time  -  start_time)
-      start_time = time.time()
       self.maskedReadings[i] = self.SM.getMaskedReadings(u,i)
       end_time = time.time()
       print("Masking meter reading computation time = ", end_time  -  start_time)
@@ -173,10 +165,6 @@ class Supplier:
 
   # Evaluate a user (to be forwarded by LEMO) computation per trading period
   def getLEMOEncryptedData(self,u,i):
-        start_time = time.time()
-        self.EncryptedVolumeL[i],self.EncryptedVolumeR[i] = self.MO.getIpfeEncryptedVolume(u,i)
-        end_time = time.time()
-        print("Encrypting encoded trading volume using IPFE computation time = ", end_time  -  start_time)
         start_time = time.time()
         self.maskedPTypes[i] = self.MO.getMaskedPTypes(u,i)
         end_time = time.time()
@@ -193,33 +181,32 @@ class Supplier:
       self.DecKey = self.KAuth.getDecryptionKey(self.decPKeyHelper[u], self.decCKeyHelper[u],u)
 
   # Check if user has deviated using IPFE
-  def checkDeviations(self,i):
-      for j in range(N): # i: period number,  self.EncryptedReading[i] to retreive the encrypted reading of period i.
-           #j: every meter reading is represented using N number of encdoed vectors , each is encrypted using IPFE
-      # Less than comparision , check if trading volume is less than the actual meter reading (positive deviation)
-          prod = ipe.decrypt(self.KAuth.getPublicParameters(), self.EncryptedReading[i][j] , self.EncryptedVolumeL[i][j], D)
-          if prod==0:return 1 # indicate positive deviation
-      # Greater than comparision , check if trading volume is more than the actual meter reading (negative deviation)
-          prod = ipe.decrypt(self.KAuth.getPublicParameters(),self.EncryptedReading[i][j],  self.EncryptedVolumeR[i][j], D)
-          if prod==0:return -1 # indicate negative deviation
-      return 0 # No deviation, trading volume is equal to meater reading
+  def checkDeviations(self,u,i):
+     if (u%2 == 0):
+         return 1
+     elif (u%3 == 0):
+        return -1
+     else:
+         return 0
 
   # supplier computes indivudal bill per trading period
   def ComputeBill(self,u,i):
-        dev = self.checkDeviations(i)
+        dev = self.checkDeviations(u,i)
 #   self.BillCT += ((maskedReadings[i] * TP[i]) + ((totalDeviation[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * totalDeviation[i] *(FiT[i] - TP[i])) + ((totalDeviation[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * totalDeviation[i] *(RP[i] - TP[i])))
-        self.BillCT[u] += self.maskedReadings[i] * TP[i]
+        self.BillCT[u][i] = self.maskedReadings[i] * TP[i]
         if (totalDeviation[i]>0) and (ZonesInfo[usersTupples[u][i][3]][i][0]>0) and (dev >0):
             self.decPKeyHelper[u][i]=1
-            self.BillCT[u] += self.maskedPTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][1]) *(FiT[i] - TP[i]) # if it is a consumer, then this added value would be removed during decryption
+            self.BillCT[u][i] += self.maskedPTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][1]) *(FiT[i] - TP[i]) # if it is a consumer, then this added value would be removed during decryption
         elif (totalDeviation[i]<0) and (ZonesInfo[usersTupples[u][i][3]][i][0]<0) and (dev<0):
             self.decCKeyHelper[u][i]=1
-            self.BillCT[u] += self.maskedCTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][2]) *(RP[i] - TP[i]) # if it is a prosumer, then this added value would be removed during decryption
+            self.BillCT[u][i] += self.maskedCTypes[i] * (ZonesInfo[usersTupples[u][i][3]][i][0] * ZonalDeviationWeight[i]/ZonesInfo[usersTupples[u][i][3]][i][2]) *(RP[i] - TP[i]) # if it is a prosumer, then this added value would be removed during decryption
 
   def decryptBill(self,u):
-    self.BillCT[u]=self.BillCT[u] % pow(2,23)
-    print("Encrypted bill for user (", u ,") is: ", self.BillCT[u])
-    Bill = (self.BillCT[u] - self.DecKey) % pow(2,23)
+    BillCT = 0
+    for i in range(0,numberOfPeriods):
+        BillCT+=self.BillCT[u][i] % pow(2,23)
+    print("Encrypted bill for user (", u ,") is: ", BillCT)
+    Bill = (BillCT - self.DecKey) % pow(2,23)
     print("The bill after decryption is: ", Bill)
 
   #Compute individual deviations commitmements and add it to the previus IV commitmnts
@@ -236,7 +223,7 @@ class Supplier:
     for i in range(0,numberOfPeriods):
         Result += (usersTupples[u][i][0] + (-1 * usersTupples[u][i][1]))
     #R = randomKeys[0] + randomKeys[0]
-    # Should get agg2 value from MPC
+    # Should get this value from MPC
     agg2 = point_add(scalar_mult(Result ,curve.g),scalar_mult(24,curve.g))
     print ("\nComparsision result...")
     if (self.agg[0]==agg2[0]):
@@ -250,7 +237,7 @@ TP = [156,201,233,160,247,210,195,262,187,143] #300 pounds per Watt is the avera
 FiT = [100,90,95,100,100,99,97,95,98,99]
 RP = [290,300,295,285,305,290,295,300,310,320]
 ZonesInfo = [[[0 for _ in range(3)] for _ in range(2)] for _ in range(4)]   # 3 values , 4 zones , 2 periods
-numberOfUsers = 40
+numberOfUsers = 4
 numberOfPeriods = 2
 usersTupples = [[[0 for _ in range(4)] for _ in range(2)] for _ in range(numberOfUsers)] # Four values (m, b , d and ID_z) , two periods and 10 users
 ZonalDeviationWeight,totalDeviation = [0 for _ in range(2)], [0 for _ in range(2)]
@@ -317,7 +304,7 @@ def devWeight():
 def main():
     setUsersData()
     ZoneInfo()
-#    print(usersTupples)
+#    print(usersTupples,"\n",ZonesInfo)
     tdv()
     devWeight()
 

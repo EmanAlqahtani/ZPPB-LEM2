@@ -18,14 +18,15 @@ sys.path.insert(1, os.path.abspath('..'))
 from fhipe.fhipe import ipe
 
 class KeyAuthority:
-  readingsKeys,pTypeKeys,cTypeKeys = [],[],[]
+  numberOfPeriods=2
+  readingsKeys,pTypeKeys,cTypeKeys = [0 for _ in range(numberOfPeriods)] ,[0 for _ in range(numberOfPeriods)],[0 for _ in range(numberOfPeriods)]
   DecKey,pTypeDecKey,cTypeDecKey,rDecKey = 0 ,0, 0, 0
   pp, sk = 0,0
 
   def getReadingsEncryptionKeys(self):
     for i in range(0,numberOfPeriods):
-      n = int.from_bytes(os.urandom(4), byteorder="big")
-      KeyAuthority.readingsKeys.append(n)
+      n = int.from_bytes(os.urandom(16), byteorder="big")
+      KeyAuthority.readingsKeys[i]=n
     #print("Secret meter reading keys are: ",KeyAuthority.readingsKeys)
     return KeyAuthority.readingsKeys
 
@@ -44,8 +45,8 @@ class KeyAuthority:
 
   def getPTypeEncryptionKeys(self):
     for i in range(0,numberOfPeriods):
-      n = int.from_bytes(os.urandom(4), byteorder="big")
-      KeyAuthority.pTypeKeys.append(n)
+      n = int.from_bytes(os.urandom(16), byteorder="big")
+      KeyAuthority.pTypeKeys[i]=n
     #print("Secret p type keys are: ",KeyAuthority.pTypeKeys)
     return KeyAuthority.pTypeKeys
 
@@ -59,8 +60,8 @@ class KeyAuthority:
 
   def getCTypeEncryptionKeys(self):
     for i in range(0,numberOfPeriods): #10 periods
-      n = int.from_bytes(os.urandom(4), byteorder="big")
-      KeyAuthority.cTypeKeys.append(n)
+      n = int.from_bytes(os.urandom(16), byteorder="big")
+      KeyAuthority.cTypeKeys[i]=n
     #print("Secret c type keys are: ",KeyAuthority.cTypeKeys)
     return KeyAuthority.cTypeKeys
 
@@ -127,6 +128,7 @@ class MarketOperator:
 
   # InnerProducts functionl encryption (bid volumes)
   def getIpfeEncryptedVolume(self,u,i):
+  #       print(ctypes.sizeof(ctypes.c_int(encoding.VectorXLEncoding(usersTupples[u][i][1],D)[0][0])) ) # returns 4 bytes , a single element in a single array of the encoded vector of bv!
 #      self.EncodedVolumesL,self.EncodedVolumesR = encoding.VectorXLEncoding(5,D),encoding.VectorXREncoding(5,D)
           if usersTupples[u][i][2]==1:
               for j in range(N):
@@ -264,7 +266,7 @@ N = D-1
 # To change numberOfPeriods, we need to change the way we read the data
 def setUsersData():
     try:
-        with open("/Users/emanahmed/Documents/GitHub/ZPPB-LEM2/data/input-P0-1.txt", 'r') as file:
+        with open("./data/input-P0-1.txt", 'r') as file:
             u,p,v=0,0,0
             n=0
             for line in file:
@@ -318,6 +320,7 @@ def main():
     setUsersData()
     ZoneInfo()
 #    print(usersTupples)
+#    print(ctypes.sizeof(ctypes.c_int(usersTupples[0][0][0]))) #returns 4 bytes, typical python representation of integer ( can not be changed)
     tdv()
     devWeight()
 
@@ -337,6 +340,17 @@ def main():
         supplier.getDecKey(u) #Get bill decryption key from KA
         supplier.decryptBill(u) #Compute and decrypt indivudal bill per billing period
         supplier.checkIVCommitments(u) # Validate IV
+
+''' #to evaluate KA Computation time + getDecKey()
+    KAuth = KeyAuthority()
+
+    KAuth.ipeSetup() # once only during registeration ( public and private key (pp,msk))
+    supplier = Supplier()
+    start_time = time.time()
+    for u in range(numberOfUsers):
+        supplier.init() # per billing period
+    end_time = time.time()
+    print("KA total computation time",end_time - start_time)'''
 
     # For testing
 '''    print("For testing:")

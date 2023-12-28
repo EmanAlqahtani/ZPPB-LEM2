@@ -251,7 +251,7 @@ N = D-1
 # To change numberOfPeriods, we need to change the way we read the data
 def setUsersData():
     try:
-        with open("/Users/emanahmed/Documents/GitHub/ZPPB-LEM2/data/input-P0-1.txt", 'r') as file:
+        with open("./data/input-P0-1.txt", 'r') as file:
             u,p,v=0,0,0
             n=0
             for line in file:
@@ -310,7 +310,6 @@ def main():
 
     # IPE keysSetup
     KAuth = KeyAuthority()
-    KAuth.ipeSetup()
     supplier = Supplier()
 
     for u in range(numberOfUsers):
@@ -346,5 +345,5 @@ def main():
     Bill = Bill % pow(2,23)
     print("Bill computation without deviations in clear (for testing) is: ", Bill)'''
 
-main()
-#cProfile.run("main()")
+#main()
+cProfile.run("main()")

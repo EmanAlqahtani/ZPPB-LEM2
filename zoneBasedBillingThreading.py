@@ -1,4 +1,10 @@
+# Change randoms
 # check remainder: gives incorrect results
+# later, mybe the loop through the periods outside
+#(this requirs massive changes, but it is the right way
+#( we need objects of SMs and users in LEMO and KA and connect them through user ID probably to  create a valid decryption key ))
+# The way I did it, for simplicity, I go through all supplier calls at once and make the KEY authority keys static
+# In that case, we can add threads to the last version with effecint times records
 import random
 import os
 import hashlib
@@ -6,9 +12,8 @@ import binascii
 import sys
 import encoding
 import cProfile,time
-import math
+import threading
 from ecc import point_add, scalar_mult, curve
-from statistics import mean
 # Path hack
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.insert(1, os.path.abspath('..'))
@@ -156,6 +161,10 @@ class Supplier:
   # Evaluate SM computation per trading period
   def getSMEncryptedData(self,u,i):
       start_time = time.time()
+      self.EncryptedReading[i] = self.SM.getIpfeEncryptedReading(u,i)
+      end_time = time.time()
+      print("Encrypting encoded meter reading using IPFE computation time = ", end_time  -  start_time)
+      start_time = time.time()
       self.maskedReadings[i] = self.SM.getMaskedReadings(u,i)
       end_time = time.time()
       print("Masking meter reading computation time = ", end_time  -  start_time)
@@ -167,8 +176,11 @@ class Supplier:
   # Evaluate a user (to be forwarded by LEMO) computation per trading period
   def getLEMOEncryptedData(self,u,i):
         start_time = time.time()
+        self.EncryptedVolumeL[i],self.EncryptedVolumeR[i] = self.MO.getIpfeEncryptedVolume(u,i)
+        end_time = time.time()
+        print("Encrypting encoded trading volume using IPFE computation time = ", end_time  -  start_time)
+        start_time = time.time()
         self.maskedPTypes[i] = self.MO.getMaskedPTypes(u,i)
-        print(len(self.maskedPTypes[i]))
         end_time = time.time()
         print("Masking first vector of participation type computation time = ", end_time  -  start_time)
         start_time = time.time()
@@ -183,17 +195,20 @@ class Supplier:
       self.DecKey = self.KAuth.getDecryptionKey(self.decPKeyHelper[u], self.decCKeyHelper[u],u)
 
   # Check if user has deviated using IPFE
-  def checkDeviations(self,u,i):
-     if (u%2 == 0):
-         return 1
-     elif (u%3 == 0):
-        return -1
-     else:
-         return 0
+  def checkDeviations(self,i):
+      for j in range(N): # i: period number,  self.EncryptedReading[i] to retreive the encrypted reading of period i.
+           #j: every meter reading is represented using N number of encdoed vectors , each is encrypted using IPFE
+      # Less than comparision , check if trading volume is less than the actual meter reading (positive deviation)
+          prod = ipe.decrypt(self.KAuth.getPublicParameters(), self.EncryptedReading[i][j] , self.EncryptedVolumeL[i][j], D)
+          if prod==0:return 1 # indicate positive deviation
+      # Greater than comparision , check if trading volume is more than the actual meter reading (negative deviation)
+          prod = ipe.decrypt(self.KAuth.getPublicParameters(),self.EncryptedReading[i][j],  self.EncryptedVolumeR[i][j], D)
+          if prod==0:return -1 # indicate negative deviation
+      return 0 # No deviation, trading volume is equal to meater reading
 
   # supplier computes indivudal bill per trading period
   def ComputeBill(self,u,i):
-        dev = self.checkDeviations(u,i)
+        dev = self.checkDeviations(i)
 #   self.BillCT += ((maskedReadings[i] * TP[i]) + ((totalDeviation[i]>0) * (self.checkDeviations(i)>0) * maskedPTypes[i] * totalDeviation[i] *(FiT[i] - TP[i])) + ((totalDeviation[i]<0) * (self.checkDeviations(i)<0) * maskedCTypes[i] * totalDeviation[i] *(RP[i] - TP[i])))
         self.BillCT[u] += self.maskedReadings[i] * TP[i]
         if (totalDeviation[i]>0) and (ZonesInfo[usersTupples[u][i][3]][i][0]>0) and (dev >0):
@@ -223,7 +238,7 @@ class Supplier:
     for i in range(0,numberOfPeriods):
         Result += (usersTupples[u][i][0] + (-1 * usersTupples[u][i][1]))
     #R = randomKeys[0] + randomKeys[0]
-    # Should get this value from MPC
+    # Should get agg2 value from MPC
     agg2 = point_add(scalar_mult(Result ,curve.g),scalar_mult(24,curve.g))
     print ("\nComparsision result...")
     if (self.agg[0]==agg2[0]):
@@ -237,8 +252,7 @@ TP = [156,201,233,160,247,210,195,262,187,143] #300 pounds per Watt is the avera
 FiT = [100,90,95,100,100,99,97,95,98,99]
 RP = [290,300,295,285,305,290,295,300,310,320]
 ZonesInfo = [[[0 for _ in range(3)] for _ in range(2)] for _ in range(4)]   # 3 values , 4 zones , 2 periods
-numberOfUsers = 40
-numberOfSuppliers =10
+numberOfUsers = 70
 numberOfPeriods = 2
 usersTupples = [[[0 for _ in range(4)] for _ in range(2)] for _ in range(numberOfUsers)] # Four values (m, b , d and ID_z) , two periods and 10 users
 ZonalDeviationWeight,totalDeviation = [0 for _ in range(2)], [0 for _ in range(2)]
@@ -252,7 +266,7 @@ N = D-1
 # To change numberOfPeriods, we need to change the way we read the data
 def setUsersData():
     try:
-        with open("./data/input-P0-1.txt", 'r') as file:
+        with open("/Users/emanahmed/Documents/GitHub/ZPPB-LEM2/data/input-P0-1.txt", 'r') as file:
             u,p,v=0,0,0
             n=0
             for line in file:
@@ -305,48 +319,31 @@ def devWeight():
 def main():
     setUsersData()
     ZoneInfo()
-#    print(usersTupples,"\n",ZonesInfo)
+#    print(usersTupples)
     tdv()
     devWeight()
 
     # IPE keysSetup
-    supCompTimePerTP = [[0 for _ in range(numberOfPeriods)] for _ in range(numberOfSuppliers)]
-    supCompTimePerBP = [0 for _ in range(numberOfSuppliers)]
-    sum=0
-
-    # IPE keysSetup
     KAuth = KeyAuthority()
+    KAuth.ipeSetup()
     supplier = Supplier()
-    for s in range(numberOfSuppliers):
-        start_value = s*math.ceil(numberOfUsers/numberOfSuppliers)
-        if s == numberOfSuppliers - 1:
-            end_value = (s*math.ceil(numberOfUsers/numberOfSuppliers)) + math.floor(numberOfUsers/numberOfSuppliers)
-        else:
-            end_value = (s*math.ceil(numberOfUsers/numberOfSuppliers)) + math.ceil(numberOfUsers/numberOfSuppliers)
-        for u in range(start_value,end_value):
-            print("USER (", u ,") BILLING DETAILS: ")
-            supplier.init()
-            for i in range(numberOfPeriods):
-                supplier.getSMEncryptedData(u,i)
-                supplier.getLEMOEncryptedData(u,i)
-                start_time = time.time()
-                supplier.ComputeBill(u,i) #Compute bill on encrypted data, per trading period
-                end_time= time.time() - start_time
-                supCompTimePerTP[s][i]+=end_time
-                supplier.computeIVCommitment(u,i) #Compute IV commitmements and add it to the previus commitmnts
-            supplier.getDecKey(u) #Get bill decryption key from KA
-            start_time = time.time()
-            supplier.decryptBill(u) #Compute and decrypt indivudal bill per billing period
-            supCompTimePerBP[s]+=time.time() - start_time
-            supplier.checkIVCommitments(u) # Validate IV
+    threads = []
+    start_time = time.time()
+    for u in range(numberOfUsers):
+        print("USER (", u ,") BILLING DETAILS: ")
+        supplier.init()
         for i in range(numberOfPeriods):
-            sum += supCompTimePerTP[s][i]
-            print("Bills computation time of supplier (",s,") at period", i, "is: ", supCompTimePerTP[s][i])
-        print("Bills computation time of supplier (",s,"), per billing period: ", supCompTimePerBP[s])
-
-    print("Average bills compitation time for each supplier, per trading period: ",sum/(numberOfSuppliers * numberOfPeriods) )
-    print("Average bills compitation time for each supplier, per billing period: ",mean(supCompTimePerBP) )
-
+            supplier.getSMEncryptedData(u,i)
+            supplier.getLEMOEncryptedData(u,i)
+            thread = threading.Thread(target=supplier.ComputeBill,args=(u,i))
+            threads.append(thread)
+            thread.start()
+#            supplier.ComputeBill(u,i) #Compute bill on encrypted data, per trading period
+            supplier.computeIVCommitment(u,i) #Compute IV commitmements and add it to the previus commitmnts
+    print("computation time for supplier, per trading period", time.time() - start_time)
+#        supplier.getDecKey(u) #Get bill decryption key from KA
+#        supplier.decryptBill(u) #Compute and decrypt indivudal bill per billing period
+#        supplier.checkIVCommitments(u) # Validate IV
 
     # For testing
 '''    print("For testing:")
